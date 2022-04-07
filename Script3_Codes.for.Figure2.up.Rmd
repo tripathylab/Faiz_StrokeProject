@@ -1,0 +1,182 @@
+---
+title: "Faiz_Strokedata_Script3_Codes.for.Figure2"
+author: "NS"
+date: '2022-03-10'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Libraries:
+```{r, echo=FALSE}
+
+library(Seurat)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(viridis)
+library(viridisLite)
+
+```
+
+## Figure 2, part A
+```{r setup, include=FALSE}
+
+#Make clusters start at 1 and assign it into a new column in metadata named 'new_clusters'
+seu.combined$new_clusters <- as.factor(as.numeric(as.character(seu.combined$seurat_clusters))+1)
+
+#We'll use "new_clusters" variable for plotting
+Idents(seu.combined) <- ("new_clusters")
+
+#Visualize
+my.cols = c ('#e64a3d',  '#f2cf59', '#a1a2a6', '#c5d7c0', '#8ec9bb', '#f8ca9d', '#253656', '#5d947c')
+
+DimPlot(seu.combined, reduction = "umap", cols = my.cols) + 
+  FontSize(x.title = 18, y.title = 20) # Note, you may choose "tsne" function instead of "umap" here
+                                    
+```
+
+## Figure 2, part B
+```{r setup, include=FALSE}
+
+#What proportion of cells are in each Cluster per Group/UN vs S ?
+cells.prop <- prop.table(table(Idents(seu.combined),seu.combined@meta.data[["orig.ident"]]))
+
+#Convert table to a dataframe
+cells.prop.df <- as.data.frame(cells.prop) 
+
+#Get proportions in 100
+cells.prop.df2 <- cells.prop.df %>% mutate(cells.prop.df, percentage = Freq*100)
+
+#Rename the columns
+colnames(cells.prop.df2) <- c("cluster", "groups", "Freq", "percentage") 
+
+cells.prop.df2$groups <- factor(cells.prop.df2$groups, levels = c("Uninjured", "Stroke")) # define levels for grouping factor 
+
+#Visualize
+ggplot(cells.prop.df2, aes(x = cluster, y= round(percentage, digits = 3), colour=groups, fill = groups)) +
+  geom_bar(stat="identity", position="dodge", size=0.8,  width=0.8, colour='grey20') +
+  geom_text(aes(label=round(percentage, digits = 2)), size=3, position = position_dodge2(width = 1, preserve = "single"), vjust=-1, hjust=0.5, check_overlap = TRUE, colour = "black") +
+  scale_fill_manual(values = alpha(c("#a1a2a6", "#f2cf59"), 0.7), aesthetics = "fill")+
+  scale_y_continuous(limits = c(0, 20))+
+  labs(x = "Clusters", y = "Cell proportion (%)")+
+  theme_classic()+
+  theme(axis.title.x= element_text(face="bold", size=12),
+        axis.title.y= element_text(face="bold", size=12),
+        axis.line = element_line(size = 1),
+        axis.ticks= element_line(size = 1),
+        axis.text= element_text(face="bold", size=10),
+        legend.text= element_text(face="bold", size=7),
+        legend.title= element_text(face="bold", size=8),
+        legend.box= "vertical",
+        plot.title = element_text(colour="black"),
+        panel.background = element_rect(fill = "NA"))
+
+```
+
+## Figure 2, part C
+```{r setup, include=FALSE}
+
+#Define markers
+AST.VLMCs.general.markers <- c( 'Aldh1l1', 'Aqp4', 'Apoe', 'S100b', 'Gfap','Slc1a3', 'Ptgds', 'Ogn', 'Lum')
+
+#Note that 'Ptgds', 'Ogn', 'Lum' are VLMCs canonical markers
+
+Idents(cluster.average.exp) <- "new_clusters"
+
+DoHeatmap(object = cluster.average.exp, features = AST.VLMCs.general.markers, group.by = "ident", group.bar = TRUE, group.colors= my.cols, label=T, size=4, angle=35) +
+  scale_fill_viridis(option="inferno", direction = -1) +
+  theme(text = element_text(size = 5), 
+      axis.title.x= element_text(face="bold", size=10),
+      axis.title.y= element_text(face="bold", size=10),
+      axis.text= element_text(face="bold", size=10),
+      legend.text= element_text(face="bold", size=8),
+      legend.title= element_text(face="bold", size=8))
+
+```
+
+## Figure 2, part D
+```{r setup, include=FALSE}
+
+#Reminder: the top10 (based on log2FC) genes/cluster were selected in the Script-1 [marker genes were filtered for p_adj_val <0.05 and p_val<0.001; then, top_n(10, avg_log2FC) were selected. The file is called "top10.per.cluster.by.log2FC"]
+
+#Visualize by heatmap
+DoHeatmap(object = seu.combined, features = top10.per.cluster.by.log2FC$gene, 
+          group.by = "ident", group.bar = TRUE, angle=30,
+          group.colors= my.cols) +
+  scale_fill_viridis(option="inferno", direction=-1)+
+  theme(text = element_text(size = 3), 
+        axis.title.x= element_text(face="bold", size=4),
+        axis.title.y= element_text(face="bold", size=4),
+        axis.text= element_text(face="bold", size=4),
+        legend.text= element_text(face="bold", size=4),
+        legend.title= element_text(face="bold", size=4))
+
+```
+
+## Figure 2, part E
+```{r setup, include=FALSE}
+
+#Note: it is same as code in part A, but with the use of 'split.by'
+DimPlot(seu.combined, reduction = "umap", split.by = "new_clusters", cols = my.cols) + 
+  FontSize(x.title = 18, y.title = 20) 
+
+
+```
+
+## Figure 2, part F
+```{r setup, include=FALSE}
+
+#Note that overlaying single-cell onto Visium Spatial transcriptomics data is explained step-by-step in the Script-2. Run the following line of code to visualize the results:  
+
+SpatialFeaturePlot(query1,features = c("1","2","3","4","5","6","7", "8") ,
+                   pt.size.factor = 1.2, ncol = 4, crop = TRUE)
+
+```
+
+## Figure 2, part G
+```{r setup, include=FALSE}
+
+#Note that differentially expressed between cluster 6 (in the penumbra) and cluster 5 (non-Penumbra) were defined as DEG_C6_C5 in the Script1. Here, we select for top 50 markers (by avg_log2FC) per cluster and plot them. 
+
+#1) Upregulated genes in cluster 6
+top.C6.markers <- DEG_C6_C5%>% rownames_to_column(var="gene")%>%
+  filter(p_val_adj <0.05, p_val<0.001, avg_log2FC > 2.49) #51 genes
+
+#2) Upregulated genes in cluster 5
+top.C5.markers <- DEG_C6_C5%>% rownames_to_column(var="gene")%>%
+  filter(p_val_adj <0.05, p_val<0.001, avg_log2FC < -1.78) #49 genes
+
+#3) Combine the two lists (create a list of top 100 DEG between C6 and C7)
+top.100.markers <- rbind(top.C5.markers, top.C6.markers)
+
+#4) Save
+write.csv(top.100.markers, "top100_DEG_between_C6&C5.csv")
+
+#5) Subset Seurat object for the two clusters of interest using 'new_clusters' identifier
+seu.cluster6and7 <- subset(seu.combined, subset=new_clusters==c("6","7")) #note that here we have selected seurat_clusters 5 and 6 using the 'new_clusters' identifier (i.e., 6 and 7)
+
+#6) Visualize
+DoHeatmap(object = seu.cluster6and7, features = top.100.markers$gene, label = TRUE, group.colors= c('#f8ca9d','#253656')) +
+  scale_fill_viridis(option="inferno", direction=-1)+
+  theme(text = element_text(size = 3), 
+        axis.title.x= element_text(face="bold", size=10),
+        axis.title.y= element_text(face="bold", size=10),
+        axis.text= element_text(face="bold", size=10),
+        legend.text= element_text(face="bold", size=8),
+        legend.title= element_text(face="bold", size=8))
+
+```
+
+## Figure 2, part H
+```{r setup, include=FALSE}
+
+#Visualize selected P.vs.non_P markers expression on Visium-day10 data
+SpatialFeaturePlot(FV.d10, features = c('Apoe','Cd81', 'Fabp5', 'Aldoc','Clu'), ncol=3)  
+
+```
+
+
+

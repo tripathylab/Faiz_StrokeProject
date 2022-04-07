@@ -1,0 +1,231 @@
+---
+title: "Faiz_Strokedata_scRNA_Analysis"
+author: "NS"
+date: '2022-03-10'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Libraries:
+```{r, echo=FALSE}
+
+library(Seurat)
+library(tidyverse)
+library(MAST)
+library(knitr) 
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+library(Matrix)
+```
+
+## Importing datasets
+```{r, echo=FALSE}
+
+#Define the path to the main Directory
+data_dir <- "/path/to/data/directory/"
+
+#List the two (Stroke and Uninjured) subdirectory/ folders within that main directory
+dirs <- list.files(data_dir, full.names = F) # Identify files names
+
+#Define a function to read in 10X files and make a Seurat object
+Read10X.to.Seurat.fun <- function(data_dir, name){
+  count.data = Read10X(data.dir = data_dir)
+  seu_obj = CreateSeuratObject(counts = count.data, min.cells = 3, min.features = 200, project = name)  
+  return(seu_obj)
+}
+
+#Call the function on both Uninjured and Stroke folders
+for (i in 1:length(dirs)) {
+  name <- paste0(dirs[i], ".seu.obj")
+  assign(name, Read10X.to.Seurat.fun(paste0(data_dir, dirs[i]), dirs[i]))
+} 
+
+#Check the loaded data 
+Stroke.seu.obj
+Uninjured.seu.obj
+```
+
+## Pre-processing 
+```{r, echo=FALSE}
+
+#Calculate the percentage of reads that map to the mitochondrial genes
+Uninjured.seu.obj[["percent.mt"]] <- PercentageFeatureSet(Uninjured.seu.obj, pattern = "^mt-")
+
+Stroke.seu.obj[["percent.mt"]] <- PercentageFeatureSet(Stroke.seu.obj, pattern = "^mt-")
+
+```
+
+## Filter cells that have >30% mitochondrial counts, and unique feature counts over 3800 or less than 200
+```{r, echo=FALSE}
+
+Uninjured.seu.obj <- subset(Uninjured.seu.obj, subset = nFeature_RNA > 200 & nFeature_RNA < 3800 & percent.mt < 30)
+
+Stroke.seu.obj <- subset(Stroke.seu.obj, subset = nFeature_RNA > 200 & nFeature_RNA < 3800 & percent.mt < 30)
+
+#Check the results
+Uninjured.seu.obj   #14784 features across 3009 samples within 1 assay
+Stroke.seu.obj #14899 features across 2529 samples within 1 assay 
+```
+
+##Normalize each data
+```{r, echo = FALSE}
+
+#Normalize counts data in seurat objects
+Uninjured.seu.obj = NormalizeData(Uninjured.seu.obj, 
+                        normalization.method = "LogNormalize", 
+                        scale.factor = 1000000)
+
+Stroke.seu.obj = NormalizeData(Stroke.seu.obj, 
+                                normalization.method = "LogNormalize", 
+                                scale.factor = 1000000)
+```
+
+## Merge Uninjured and Stroke datasets for unbiased downstream analysis
+```{r, echo = FALSE}
+
+#Merging the two Seurat.objects
+seu.combined <- merge(x=Uninjured.seu.obj, y = Stroke.seu.obj, add.cell.ids = c("UN", "S"), project = "UNandS")
+
+seu.combined  #15472 features across 5538 samples within 1 assay 
+
+#Notice that cell names now have an added identifier
+head(colnames(seu.combined))
+
+#Check the no. of cells per group
+table(seu.combined$orig.ident) #Stroke: 2529, and Uninjured: 3009, cells
+          
+```
+
+##Standard workflow
+```{r, echo = FALSE}
+
+#1) Normalization 
+seu.combined <- NormalizeData(seu.combined, normalization.method = "LogNormalize", scale.factor = 10000)
+
+#2) Centering and Scaling data (for all genes)
+set.seed(42)
+all.genes_UNandS <- rownames(seu.combined)
+seu.combined <- ScaleData(seu.combined, features = all.genes_UNandS)
+
+#3) Find variable features
+seu.combined <- FindVariableFeatures(seu.combined, selection.method = "vst", nfeatures = 7800) #50% VF
+
+#4) Principle component analysis
+seu.combined <- RunPCA(seu.combined, npcs = 30, features = VariableFeatures(object = seu.combined))
+
+#check PCs
+DimHeatmap(seu.combined, dims = 1:15, cells = 200, balanced = TRUE)
+DimPlot(seu.combined, reduction = "pca")
+ElbowPlot(object = seu.combined, reduction = "pca") # The elbow occurs at the 6th PCs 
+
+#5) Find neighbours
+seu.combined <- FindNeighbors(seu.combined, dims = 1:10)
+seu.combined <- FindClusters(seu.combined, resolution = 0.5)
+
+#6) Non-Linear dimential reduction
+seu.combined <- RunUMAP(seu.combined, reduction = "pca", dims = 1:10)
+seu.combined = RunTSNE(seu.combined, reduction = "pca", dims = 1:10)
+
+#visualize
+DimPlot(seu.combined, reduction = "umap")
+DimPlot(seu.combined, reduction = "tsne")
+
+```
+
+## Identify the number of cells per group per cluster
+```{r, echo=FALSE}
+
+#What proportion of cells are in each Cluster?
+cells.freq <- prop.table(table(Idents(seu.combined)))
+cells.freq
+
+#What proportion of cells are in each Cluster per Group/UN vs S ?
+cells.prop <- prop.table(table(Idents(seu.combined),seu.combined@meta.data[["orig.ident"]]))
+cells.prop
+
+
+```
+
+## Identify differentially expressed genes across conditions
+```{r, echo = FALSE}
+
+Idents(object = seu.combined) <- "orig.ident"
+
+UNvsS <- FindMarkers(seu.combined, group.by = 'orig.ident', ident.1 = "Uninjured", ident.2 = "Stroke")
+
+SvsUN <- FindMarkers(seu.combined, group.by = 'orig.ident', ident.1="Stroke",ident.2 = "Uninjured")  # 17 differential expressed genes were found between Un and S
+
+#Save
+write.csv(UNvsS, "Uninjured.vs.Stroke_DEGs.csv")
+write.csv(SvsUN, "Stroke.vs.Uninjured_DEGs.csv")
+
+```
+
+## Identify marker genes for clusters (relative to the other clusters) 
+```{r, echo = FALSE}
+
+#Set Idents
+Idents(object = seu.combined) <- "seurat_clusters"
+
+#Find markers
+seu.combined.All.markers <- FindAllMarkers(seu.combined,
+                          logfc.threshold = 0.25, 
+                          test.use = "MAST",
+                          min.pct = 0.25, 
+                          only.pos = FALSE)
+
+#Check the number of genes per cluster
+table(seu.combined.All.markers$cluster)  
+
+#Save
+write.csv(seu.combined.All.markers, "seu.comined.All.markers.csv") 
+
+#Select the top genes/cluster
+##1) Name columns of the DEG file
+colnames(seu.combined.All.markers) <- c("p_val", "avg_log2FC", "pct.1","pct.2", "p_adj_val", "cluster", "gene")
+
+##2) Remove genes that do not meet p_adj_val <0.05 and p_val<0.001
+top.genes <- seu.combined.All.markers %>% group_by(cluster)%>%
+  filter(p_adj_val <0.05, p_val<0.001) #8334 genes (out of 9154 genes) remain
+
+##3)Select top10 genes per cluster based on log2FC
+top10.per.cluster.by.log2FC <- top.genes %>% group_by(cluster) %>% top_n(10, avg_log2FC)
+
+```
+
+## Cross compare DEG for selected clusters (relative to one another) 
+```{r, echo = FALSE}
+
+Idents(object = seu.combined) <- "seurat_clusters"
+
+#Identify DEG between cluster 6 and cluster 5
+DEG_C6_C5 <- FindMarkers(seu.combined, group.by = 'seurat_clusters', ident.1 = "6", ident.2 = "5") #4126 DEG is identified
+
+#Save
+write.csv(DEG_C6_C5  , "DEG.between.cluster6.vs.5.csv")
+
+```
+
+## Calculate the average gene expression of all cells within a cluster
+```{r, echo = FALSE}
+#Define levels
+orig.levels <- levels(seu.combined) #UN, S
+Idents(seu.combined) <- gsub(pattern = " ", replacement = "_", x = Idents(seu.combined))#each barcode
+orig.levels <- gsub(pattern = " ", replacement = "_", x = orig.levels)
+levels(seu.combined) <- orig.levels
+
+#Average expression for different conditions using "group.by" 
+group.average.exp <- AverageExpression(seu.combined, return.seurat = TRUE, group.by = "orig.ident")
+cluster.average.exp <- AverageExpression(seu.combined, return.seurat = TRUE, group.by = "new_clusters")
+
+#Save
+saveRDS(group.average.exp, "AVG.exp.for.SandUn.groups.rds")
+saveRDS(cluster.average.exp, "AVG.exp.for.clusters.rds")
+
+```
+
+

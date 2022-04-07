@@ -1,2 +1,2 @@
 # Faiz_StrokeProject
-Files associated with single-cell and spatial transcriptomic data analysis of Faiz_Stroke_Project
+This repo contains four scripts, namely script 1-4, which present the workflow for analyzing scRNA-seq data, integrating scRNA-seq and Visium spatial transcriptomics data, making plots shown in the Figure 2 of the related paper, and preparing supplementary figures, respectively. All data are collected from stroke and uninjured mouse cortices and analyzed using Seurat package. Through integrated single-cell and spatial transcriptomics data analysis, the heterogeneity of astrocyte states post-stroke is revealed.

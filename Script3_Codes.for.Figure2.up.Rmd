@@ -174,7 +174,7 @@ DoHeatmap(object = seu.cluster6and7, features = top.100.markers$gene, label = TR
 ```{r setup, include=FALSE}
 
 #Visualize selected P.vs.non_P markers expression on Visium-day10 data
-SpatialFeaturePlot(FV.d10, features = c('Apoe','Cd81', 'Fabp5', 'Aldoc','Clu'), ncol=3)  
+SpatialFeaturePlot(FV.d10, features = c('Apoe','Itm2b','Ftl1','Sparc','Fabp5', 'Clu'), ncol=3)  
 
 ```
 
